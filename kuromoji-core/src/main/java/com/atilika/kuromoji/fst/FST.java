@@ -21,7 +21,9 @@ import com.atilika.kuromoji.util.ResourceResolver;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 public class FST {
 
@@ -72,13 +74,14 @@ public class FST {
         }
     }
 
-    public int lookup(String input) {
+    public List<Match> commonPrefixSearch(String input) {
         final int length = input.length();
         int address = fst.length - 1;
         int accumulator = 0;
         int index = 0;
+        List<Match> matches = new ArrayList<Match>();
 
-        while (true) {
+        Loop:while (true) {
             final byte stateTypByte = Bits.getByte(fst, address);
 
             // The number of bytes in the target address (always larger than zero)
@@ -92,11 +95,11 @@ public class FST {
             final byte stateType = (byte) (stateTypByte & 0x80);
             address -= 1;
 
+            if (stateType == Compiler.STATE_TYPE_ACCEPT) {
+                matches.add(new Match(index, accumulator));
+            }
             if (index == length) {
-                if (stateType == Compiler.STATE_TYPE_MATCH) {
-                    accumulator = 0; // Prefix match
-                }
-                return accumulator;
+                break Loop;
             }
 
             boolean matched = false;
@@ -109,7 +112,7 @@ public class FST {
                 final int jump = jumpCache[c];
 
                 if (jump == -1) {
-                    return -1;
+                    break Loop;
                 }
 
                 final int output = outputCache[c];
@@ -125,7 +128,7 @@ public class FST {
                 address -= 2;
 
                 if (numberOfArcs == 0) {
-                    return -1;
+                    break Loop;
                 }
 
                 int high = numberOfArcs - 1;
@@ -151,11 +154,23 @@ public class FST {
             }
 
             if (matched == false) {
-                return -1;
+                break Loop;
             }
-
             index++;
         }
+        return matches;
+    }
+
+    public int lookup(String input) {
+        List<Match> matches = this.commonPrefixSearch(input);
+        if (matches.isEmpty()) {
+            return -1;
+        }
+        Match last = matches.get(matches.size()-1);
+        if (last.position != input.length()) {
+            return -1;
+        }
+        return last.output;
     }
 
     private char getArcLabel(final int arcAddress, final int accumulateBytes, final int jumpBytes) {

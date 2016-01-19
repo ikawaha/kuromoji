@@ -22,6 +22,7 @@ import com.atilika.kuromoji.dict.TokenInfoDictionary;
 import com.atilika.kuromoji.dict.UnknownDictionary;
 import com.atilika.kuromoji.dict.UserDictionary;
 import com.atilika.kuromoji.fst.FST;
+import com.atilika.kuromoji.fst.Match;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -108,22 +109,14 @@ public class ViterbiBuilder {
     }
 
     private boolean processIndex(ViterbiLattice lattice, int startIndex, String suffix) {
-        boolean found = false;
-        for (int endIndex = 1; endIndex < suffix.length() + 1; endIndex++) {
-            String prefix = suffix.substring(0, endIndex);
-            int result = fst.lookup(prefix);
-
-            if (result > 0) {
-                found = true; // Don't produce unknown word starting from this index
-                for (int wordId : dictionary.lookupWordIds(result)) {
-                    ViterbiNode node = new ViterbiNode(wordId, prefix, dictionary, startIndex, ViterbiNode.Type.KNOWN);
-                    lattice.addNode(node, startIndex + 1, startIndex + 1 + endIndex);
-                }
-            } else if (result < 0) { // If result is less than zero, continue to next position
-                break;
+        List<Match> matches = fst.commonPrefixSearch(suffix);
+        for (Match match:matches) {
+            for (int wordId : dictionary.lookupWordIds(match.output)) {
+                ViterbiNode node = new ViterbiNode(wordId, suffix.substring(0, match.position), dictionary, startIndex, ViterbiNode.Type.KNOWN);
+                lattice.addNode(node, startIndex + 1, startIndex + 1 + match.position);
             }
         }
-        return found;
+         return !matches.isEmpty();
     }
 
     private int processUnknownWord(int category, int i, ViterbiLattice lattice, int unknownWordEndIndex, int startIndex, String suffix, boolean found) {
